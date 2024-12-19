@@ -526,5 +526,399 @@ int main() {
     return 0;
 }
 ```
+--------------------------------------------
+
+# **Administración de entrada y salida.**
+
+# 4.1 Dispositivos y manejadores de dispositivos
+## Explica la diferencia entre dispositivos de bloque y dispositivos de carácter. Da un ejemplo de cada uno.
+
+Los dispositivos de bloque y los dispositivos de carácter se diferencian en la forma en que manejan los datos. Los dispositivos de bloque almacenan y acceden a los datos en bloques de tamaño fijo, lo que permite operaciones aleatorias y eficientes, ya que los datos pueden ser leídos o escritos en cualquier orden. Un ejemplo típico de dispositivo de bloque es un disco duro o una unidad SSD, donde los datos se manejan en sectores o bloques lógicos. Por otro lado, los dispositivos de carácter manejan los datos como un flujo continuo, procesando cada carácter de manera secuencial sin posibilidad de acceso aleatorio directo, lo que los hace ideales para dispositivos como teclados, ratones o puertos serie, donde los datos llegan en un flujo constante y en el orden en que se generan.
+
+--------------------------------
+
+##  Diseña un programa que implemente un manejador de dispositivos sencillo para un dispositivo virtual de entrada.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define TAMANO_BUFFER 256 
+
+
+typedef struct {
+    char buffer[TAMANO_BUFFER]; 
+    int indice;                
+} DispositivoVirtual;
+
+void inicializarDispositivo(DispositivoVirtual *dispositivo) {
+    memset(dispositivo->buffer, 0, TAMANO_BUFFER);
+    dispositivo->indice = 0;
+    printf("Dispositivo inicializado.\n");
+}
+
+void escribirDispositivo(DispositivoVirtual *dispositivo, char entrada) {
+    if (dispositivo->indice < TAMANO_BUFFER - 1) {
+        dispositivo->buffer[dispositivo->indice++] = entrada;
+        dispositivo->buffer[dispositivo->indice] = '\0'; 
+        printf("Carácter '%c' almacenado en el dispositivo.\n", entrada);
+    } else {
+        printf("Error: El búfer del dispositivo está lleno.\n");
+    }
+}
+
+void leerDispositivo(DispositivoVirtual *dispositivo) {
+    if (dispositivo->indice > 0) {
+        printf("Contenido del búfer: %s\n", dispositivo->buffer);
+    } else {
+        printf("El búfer está vacío.\n");
+    }
+}
+
+
+void limpiarDispositivo(DispositivoVirtual *dispositivo) {
+    memset(dispositivo->buffer, 0, TAMANO_BUFFER);
+    dispositivo->indice = 0;
+    printf("El búfer del dispositivo ha sido limpiado.\n");
+}
+
+
+int main() {
+    DispositivoVirtual dispositivo;
+    inicializarDispositivo(&dispositivo);
+
+    char opcion;
+    char entrada;
+
+    do {
+        printf("\n--- Menú del Manejador de Dispositivo ---\n");
+        printf("1. Escribir en el dispositivo\n");
+        printf("2. Leer del dispositivo\n");
+        printf("3. Limpiar el dispositivo\n");
+        printf("4. Salir\n");
+        printf("Seleccione una opción: ");
+        scanf(" %c", &opcion);
+
+        switch (opcion) {
+            case '1':
+                printf("Ingrese un carácter: ");
+                scanf(" %c", &entrada);
+                escribirDispositivo(&dispositivo, entrada);
+                break;
+            case '2':
+                leerDispositivo(&dispositivo);
+                break;
+            case '3':
+                limpiarDispositivo(&dispositivo);
+                break;
+            case '4':
+                printf("Saliendo del programa.\n");
+                break;
+            default:
+                printf("Opción no válida. Intente de nuevo.\n");
+        }
+    } while (opcion != '4');
+
+    return 0;
+}
+```
+
+------------------------------
+
+# 4.2 Mecanismos y funciones de los manejadores de dispositivos.
+
+## Investiga qué es la interrupción por E/S y cómo la administra el sistema operativo. Escribe un ejemplo en pseudocódigo para simular este proceso.
+
+Una interrupción por E/S ocurre cuando un dispositivo de entrada/salida (como un teclado, disco o impresora) requiere atención del procesador. En lugar de que el procesador espere pasivamente a que el dispositivo complete su tarea, el dispositivo genera una señal de interrupción para notificar al sistema operativo que ha terminado su operación o necesita atención. 
+El sistema operativo responde deteniendo temporalmente la ejecución del proceso actual, manejando la interrupción mediante un controlador, y luego reanuda la ejecución del proceso interrumpido. 
+Este mecanismo mejora la eficiencia al permitir que el procesador realice otras tareas mientras espera la operación de E/S.
+
+**Pseudocódigo:**
+* Inicializar sistema:
+Establecer estado del procesador en "Ejecutando proceso principal".
+Establecer cola de interrupciones vacía.
+
+* Proceso principal:
+Mientras el sistema esté activo: 
+Realizar cálculos.
+Si se genera una solicitud de E/S:
+Iniciar operación de E/S en el dispositivo.
+Continuar con cálculos mientras se completa la E/S.
+
+* Interrupción por E/S:
+Cuando el dispositivo finaliza la operación:
+Generar señal de interrupción.
+Pausar el proceso principal.
+Ejecutar manejador de interrupciones:
+Guardar el estado del proceso principal.
+Leer datos del dispositivo o confirmar finalización.
+Actualizar estructuras de datos del sistema operativo.
+Restaurar el estado del proceso principal.
+Reanudar el proceso principal.
+
+* Simulación:
+Iniciar sistema.
+Simular operaciones de cálculo y solicitudes de E/S.
+Generar interrupciones al azar y verificar su manejo.
+Terminar cuando se completen todas las operaciones.
+
+----------------------------------------
+
+## Escribe un programa que utilice el manejo de interrupciones en un sistema básico de simulación.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+#include <setjmp.h>
+
+#define MAX_INTERRUPTS 5
+
+typedef struct {
+    int interrupt_id;     
+    char description[50]; 
+} Interrupt;
+
+Interrupt interrupt_queue[MAX_INTERRUPTS]; 
+int interrupt_count = 0;                   
+
+jmp_buf env;
+
+void trigger_interrupt(int interrupt_id, const char* description) {
+    if (interrupt_count < MAX_INTERRUPTS) {
+        interrupt_queue[interrupt_count].interrupt_id = interrupt_id;
+        snprintf(interrupt_queue[interrupt_count].description, sizeof(interrupt_queue[interrupt_count].description), "%s", description);
+        interrupt_count++;
+        printf("¡Interrupción %d: %s generada!\n", interrupt_id, description);
+    } else {
+        printf("Error: Cola de interrupciones llena.\n");
+    }
+}
+
+void handle_interrupt() {
+    while (interrupt_count > 0) {
+        Interrupt interrupt = interrupt_queue[0];
+        printf("Manejando interrupción ID %d: %s\n", interrupt.interrupt_id, interrupt.description);
+
+        for (int i = 1; i < interrupt_count; i++) {
+            interrupt_queue[i - 1] = interrupt_queue[i];
+        }
+        interrupt_count--;
+
+        if (setjmp(env) == 0) {
+            printf("Contexto guardado. Retornando al punto de ejecución previo...\n");
+            longjmp(env, 1); 
+        }
+    }
+}
+
+void simulate_process() {
+    printf("Proceso en ejecución. Esperando interrupciones...\n");
+    while (1) {
+        sleep(2); 
+        printf("El proceso está trabajando...\n");
+
+        if (rand() % 5 == 0) {
+            trigger_interrupt(rand() % 100, "Evento inesperado");
+        }
+
+        if (interrupt_count > 0) {
+            handle_interrupt();
+        }
+    }
+}
+
+int main() {
+    
+    signal(SIGINT, SIG_IGN); 
+
+    simulate_process();
+
+    return 0;
+}
+```
+
+----------------
+
+# 4.3 Estructuras de datos para manejo de dispositivos.
+
+## Investiga y explica qué es una cola de E/S. Diseña una simulación de una cola con prioridad.
+
+Una cola de E/S (Entrada/Salida) es una estructura de datos utilizada en sistemas operativos para gestionar las solicitudes de operaciones de entrada y salida de los procesos. Cuando un proceso necesita realizar una operación de E/S, como leer o escribir en un dispositivo, la solicitud se coloca en una cola específica para ese dispositivo. El sistema operativo procesa estas solicitudes en el orden en que se reciben, garantizando un acceso ordenado y eficiente a los recursos de E/S. Este mecanismo es esencial para la gestión de dispositivos de E/S, ya que permite coordinar múltiples solicitudes y optimizar el rendimiento del sistema. 
+Las colas con prioridad, son estructuras de datos que permiten organizar elementos según su prioridad, de modo que los elementos con mayor prioridad se procesen antes que los de menor prioridad. Este tipo de cola es útil en escenarios donde ciertas operaciones o procesos requieren atención inmediata, como en sistemas de planificación de procesos en sistemas operativos.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    int id;             
+    int prioridad;      
+    char descripcion[50]; 
+} SolicitudEoS;
+
+typedef struct Nodo {
+    SolicitudEoS solicitud;
+    struct Nodo* siguiente;
+} Nodo;
+
+Nodo* crearNodo(int id, int prioridad, const char* descripcion) {
+    Nodo* nuevoNodo = (Nodo*)malloc(sizeof(Nodo));
+    nuevoNodo->solicitud.id = id;
+    nuevoNodo->solicitud.prioridad = prioridad;
+    strncpy(nuevoNodo->solicitud.descripcion, descripcion, sizeof(nuevoNodo->solicitud.descripcion) - 1);
+    nuevoNodo->solicitud.descripcion[sizeof(nuevoNodo->solicitud.descripcion) - 1] = '\0';
+    nuevoNodo->siguiente = NULL;
+    return nuevoNodo;
+}
+
+void insertarSolicitud(Nodo** cabeza, int id, int prioridad, const char* descripcion) {
+    Nodo* nuevoNodo = crearNodo(id, prioridad, descripcion);
+    if (*cabeza == NULL || (*cabeza)->solicitud.prioridad > prioridad) {
+        nuevoNodo->siguiente = *cabeza;
+        *cabeza = nuevoNodo;
+    } else {
+        Nodo* actual = *cabeza;
+        while (actual->siguiente != NULL && actual->siguiente->solicitud.prioridad <= prioridad) {
+            actual = actual->siguiente;
+        }
+        nuevoNodo->siguiente = actual->siguiente;
+        actual->siguiente = nuevoNodo;
+    }
+}
+
+void procesarSolicitud(Nodo** cabeza) {
+    if (*cabeza == NULL) {
+        printf("No hay solicitudes en la cola.\n");
+        return;
+    }
+    Nodo* nodoAProcesar = *cabeza;
+    *cabeza = (*cabeza)->siguiente;
+    printf("Procesando solicitud ID %d: %s\n", nodoAProcesar->solicitud.id, nodoAProcesar->solicitud.descripcion);
+    free(nodoAProcesar);
+}
+
+void mostrarCola(Nodo* cabeza) {
+    if (cabeza == NULL) {
+        printf("La cola está vacía.\n");
+        return;
+    }
+    Nodo* actual = cabeza;
+    while (actual != NULL) {
+        printf("ID: %d, Prioridad: %d, Descripción: %s\n", actual->solicitud.id, actual->solicitud.prioridad, actual->solicitud.descripcion);
+        actual = actual->siguiente;
+    }
+}
+
+int main() {
+    Nodo* cola = NULL;
+
+    insertarSolicitud(&cola, 1, 2, "Leer archivo de datos");
+    insertarSolicitud(&cola, 2, 1, "Escribir en disco");
+    insertarSolicitud(&cola, 3, 3, "Imprimir documento");
+    insertarSolicitud(&cola, 4, 1, "Leer desde red");
+
+    printf("Contenido de la cola de E/S:\n");
+    mostrarCola(cola);
+
+    printf("\nProcesando solicitudes:\n");
+    while (cola != NULL) {
+        procesarSolicitud(&cola);
+    }
+
+    return 0;
+}
+```
+
+-------------------------
+
+## Escribe un programa que simule las operaciones de un manejador de dispositivos utilizando una tabla de estructuras.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    int id;                 
+    char nombre[20];       
+    int estado;             
+    void (*abrir)(void);    
+    void (*leer)(void);    
+    void (*escribir)(void); 
+    void (*cerrar)(void);   
+} Dispositivo;
+
+void abrirDispositivo() {
+    printf("Dispositivo abierto.\n");
+}
+
+void leerDispositivo() {
+    printf("Leyendo datos del dispositivo...\n");
+}
+
+void escribirDispositivo() {
+    printf("Escribiendo datos en el dispositivo...\n");
+}
+
+void cerrarDispositivo() {
+    printf("Dispositivo cerrado.\n");
+}
+
+Dispositivo* tablaDispositivos[10]; 
+
+void inicializarDispositivo(int id, const char* nombre) {
+    Dispositivo* nuevoDispositivo = (Dispositivo*)malloc(sizeof(Dispositivo));
+    nuevoDispositivo->id = id;
+    strncpy(nuevoDispositivo->nombre, nombre, sizeof(nuevoDispositivo->nombre) - 1);
+    nuevoDispositivo->estado = 0;
+    nuevoDispositivo->abrir = abrirDispositivo;
+    nuevoDispositivo->leer = leerDispositivo;
+    nuevoDispositivo->escribir = escribirDispositivo;
+    nuevoDispositivo->cerrar = cerrarDispositivo;
+
+    tablaDispositivos[id] = nuevoDispositivo;
+}
+
+void manejarDispositivo(int id) {
+    Dispositivo* dispositivo = tablaDispositivos[id];
+    if (dispositivo == NULL) {
+        printf("Dispositivo no encontrado.\n");
+        return;
+    }
+
+    if (dispositivo->estado == 0) {
+        dispositivo->abrir();
+        dispositivo->estado = 1; 
+    }
+
+    dispositivo->leer();
+    dispositivo->escribir();
+
+    dispositivo->cerrar();
+    dispositivo->estado = 0; 
+}
+
+int main() {
+    inicializarDispositivo(0, "Dispositivo A");
+    inicializarDispositivo(1, "Dispositivo B");
+
+    printf("Manejando Dispositivo A:\n");
+    manejarDispositivo(0);
+
+    printf("\nManejando Dispositivo B:\n");
+    manejarDispositivo(1);
+
+    free(tablaDispositivos[0]);
+    free(tablaDispositivos[1]);
+
+    return 0;
+}
+```
+
+--------------------------------
 
 
