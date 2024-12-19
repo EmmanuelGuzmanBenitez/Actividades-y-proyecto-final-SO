@@ -921,4 +921,398 @@ int main() {
 
 --------------------------------
 
+# 4.4 Operaciones de Entrada/Salida
+## Diseña un flujo que describa el proceso de lectura de un archivo desde un disco magnético. Acompáñalo con un programa básico que simule el proceso.
+![Lectura de disco](https://mdm.usta.edu.co/remos_downloads/oev/logica_de_programacion/graficos/disco1.jpg)
 
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define NUM_SECTORES 10
+#define TAMANO_SECTOR 512
+
+typedef struct {
+    int id;
+    char datos[TAMANO_SECTOR];
+} Sector;
+
+typedef struct {
+    char nombre[20];
+    int sectorInicio;
+    int tamano;
+} Archivo;
+
+Sector disco[NUM_SECTORES];
+
+Archivo tablaArchivos[NUM_SECTORES];
+int numArchivos = 0;
+
+void inicializarDisco() {
+    for (int i = 0; i < NUM_SECTORES; i++) {
+        disco[i].id = i;
+        snprintf(disco[i].datos, TAMANO_SECTOR, "Datos en el sector %d", i);
+    }
+    printf("Disco inicializado con %d sectores.\n", NUM_SECTORES);
+}
+
+void crearArchivo(const char* nombre, int tamano) {
+    if (numArchivos >= NUM_SECTORES) {
+        printf("Error: No hay espacio disponible en el disco.\n");
+        return;
+    }
+
+    int sectorInicio = numArchivos; 
+    tablaArchivos[numArchivos].sectorInicio = sectorInicio;
+    tablaArchivos[numArchivos].tamano = tamano;
+    strncpy(tablaArchivos[numArchivos].nombre, nombre, sizeof(tablaArchivos[numArchivos].nombre) - 1);
+    tablaArchivos[numArchivos].nombre[sizeof(tablaArchivos[numArchivos].nombre) - 1] = '\0';
+
+    printf("Archivo '%s' creado en el sector %d con tamaño %d bytes.\n",
+           nombre, sectorInicio, tamano);
+    numArchivos++;
+}
+
+int buscarArchivo(const char* nombre) {
+    for (int i = 0; i < numArchivos; i++) {
+        if (strcmp(tablaArchivos[i].nombre, nombre) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void leerArchivo(const char* nombre) {
+    int indice = buscarArchivo(nombre);
+    if (indice == -1) {
+        printf("Error: El archivo '%s' no existe.\n", nombre);
+        return;
+    }
+
+    Archivo archivo = tablaArchivos[indice];
+    Sector sector = disco[archivo.sectorInicio];
+
+    printf("Leyendo archivo '%s' desde el sector %d:\n", nombre, archivo.sectorInicio);
+    printf("Contenido: %s\n", sector.datos);
+}
+
+int main() {
+    inicializarDisco();
+
+    crearArchivo("archivo1.txt", 256);
+    crearArchivo("archivo2.txt", 128);
+
+    printf("\n--- Lectura de archivos ---\n");
+    leerArchivo("archivo1.txt");
+    leerArchivo("archivo2.txt");
+    leerArchivo("archivo_inexistente.txt");
+
+    return 0;
+}
+```
+
+---
+
+## Implementa un programa en Python, C o java que realice operaciones de entrada/salida asíncronas usando archivos.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <aio.h>
+#include <errno.h>
+#include <unistd.h>
+
+#define TAMANO_BUFFER 1024
+
+void manejarError(const char* mensaje) {
+    perror(mensaje);
+    exit(EXIT_FAILURE);
+}
+
+void verificarEstado(struct aiocb* aiocbp) {
+    while (aio_error(aiocbp) == EINPROGRESS) {
+        printf("Operación en progreso...\n");
+        usleep(100000); 
+    }
+
+    int resultado = aio_return(aiocbp);
+    if (resultado == -1) {
+        manejarError("Error en la operación de E/S");
+    } else {
+        printf("Operación completada con éxito (%d bytes procesados).\n", resultado);
+    }
+}
+
+int main() {
+    const char* archivo = "archivo_async.txt";
+    char bufferEscritura[TAMANO_BUFFER] = "Este es un ejemplo de escritura asincrónica.\n";
+    char bufferLectura[TAMANO_BUFFER];
+
+    int fd = open(archivo, O_CREAT | O_RDWR, 0644);
+    if (fd == -1) {
+        manejarError("Error al abrir el archivo");
+    }
+
+    struct aiocb aioEscritura;
+    memset(&aioEscritura, 0, sizeof(struct aiocb));
+    aioEscritura.aio_fildes = fd;
+    aioEscritura.aio_buf = bufferEscritura;
+    aioEscritura.aio_nbytes = strlen(bufferEscritura);
+    aioEscritura.aio_offset = 0;
+
+    if (aio_write(&aioEscritura) == -1) {
+        manejarError("Error al iniciar la escritura asincrónica");
+    }
+    printf("Escritura asincrónica iniciada...\n");
+
+    verificarEstado(&aioEscritura);
+
+    struct aiocb aioLectura;
+    memset(&aioLectura, 0, sizeof(struct aiocb));
+    aioLectura.aio_fildes = fd;
+    aioLectura.aio_buf = bufferLectura;
+    aioLectura.aio_nbytes = TAMANO_BUFFER;
+    aioLectura.aio_offset = 0;
+
+    if (aio_read(&aioLectura) == -1) {
+        manejarError("Error al iniciar la lectura asincrónica");
+    }
+    printf("Lectura asincrónica iniciada...\n");
+
+    verificarEstado(&aioLectura);
+
+    printf("Contenido leído: %s\n", bufferLectura);
+
+    close(fd);
+
+    return 0;
+}
+```
+
+------------
+
+# Integración
+
+## Escribe un programa que implemente el algoritmo de planificación de discos "Elevator (SCAN)".
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#define MAX_SOLICITUDES 100
+
+void ordenar(int solicitudes[], int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (solicitudes[j] > solicitudes[j + 1]) {
+                int temp = solicitudes[j];
+                solicitudes[j] = solicitudes[j + 1];
+                solicitudes[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void scan(int solicitudes[], int n, int inicio, int direccion, int limiteDisco) {
+    ordenar(solicitudes, n);
+
+    int recorrido = 0;
+    printf("Orden de acceso: ");
+
+    int i = 0;
+    while (i < n && solicitudes[i] < inicio) {
+        i++;
+    }
+
+    if (direccion == 1) {
+        for (int j = i; j < n; j++) {
+            printf("%d ", solicitudes[j]);
+            recorrido += abs(solicitudes[j] - inicio);
+            inicio = solicitudes[j];
+        }
+        if (inicio < limiteDisco) {
+            recorrido += abs(limiteDisco - inicio);
+            inicio = limiteDisco;
+        }
+
+        for (int j = i - 1; j >= 0; j--) {
+            printf("%d ", solicitudes[j]);
+            recorrido += abs(solicitudes[j] - inicio);
+            inicio = solicitudes[j];
+        }
+    } else { 
+        for (int j = i - 1; j >= 0; j--) {
+            printf("%d ", solicitudes[j]);
+            recorrido += abs(solicitudes[j] - inicio);
+            inicio = solicitudes[j];
+        }
+        if (inicio > 0) {
+            recorrido += abs(inicio);
+            inicio = 0;
+        }
+
+        for (int j = i; j < n; j++) {
+            printf("%d ", solicitudes[j]);
+            recorrido += abs(solicitudes[j] - inicio);
+            inicio = solicitudes[j];
+        }
+    }
+
+    printf("\nRecorrido total del cabezal: %d\n", recorrido);
+}
+
+int main() {
+    int solicitudes[MAX_SOLICITUDES], n;
+    int inicio, direccion, limiteDisco;
+
+    printf("Ingrese el número de solicitudes: ");
+    scanf("%d", &n);
+
+    printf("Ingrese las posiciones de las solicitudes: ");
+    for (int i = 0; i < n; i++) {
+        scanf("%d", &solicitudes[i]);
+    }
+
+    printf("Ingrese la posición inicial del cabezal: ");
+    scanf("%d", &inicio);
+
+    printf("Ingrese el límite del disco: ");
+    scanf("%d", &limiteDisco);
+
+    printf("Ingrese la dirección inicial (1 = ascendente, 0 = descendente): ");
+    scanf("%d", &direccion);
+
+    printf("\nSimulación del algoritmo SCAN:\n");
+    scan(solicitudes, n, inicio, direccion, limiteDisco);
+
+    return 0;
+}
+```
+
+----
+
+##  Diseña un sistema que maneje múltiples dispositivos simulados (disco duro, impresora, teclado) y muestra cómo se realiza la comunicación entre ellos.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include <unistd.h>
+
+typedef struct {
+    char dispositivo[20]; 
+    char operacion[50];   
+} Solicitud;
+
+#define MAX_COLA 10
+Solicitud colaSolicitudes[MAX_COLA];
+int inicio = 0, fin = 0, numSolicitudes = 0;
+
+pthread_mutex_t mutexCola = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condColaLlena = PTHREAD_COND_INITIALIZER;
+pthread_cond_t condColaVacia = PTHREAD_COND_INITIALIZER;
+
+void agregarSolicitud(Solicitud solicitud) {
+    pthread_mutex_lock(&mutexCola);
+    while (numSolicitudes == MAX_COLA) {
+        pthread_cond_wait(&condColaLlena, &mutexCola);
+    }
+    colaSolicitudes[fin] = solicitud;
+    fin = (fin + 1) % MAX_COLA;
+    numSolicitudes++;
+    pthread_cond_signal(&condColaVacia);
+    pthread_mutex_unlock(&mutexCola);
+}
+
+Solicitud procesarSolicitud() {
+    pthread_mutex_lock(&mutexCola);
+    while (numSolicitudes == 0) {
+        pthread_cond_wait(&condColaVacia, &mutexCola);
+    }
+    Solicitud solicitud = colaSolicitudes[inicio];
+    inicio = (inicio + 1) % MAX_COLA;
+    numSolicitudes--;
+    pthread_cond_signal(&condColaLlena);
+    pthread_mutex_unlock(&mutexCola);
+    return solicitud;
+}
+
+void* manejadorCentral(void* arg) {
+    while (1) {
+        Solicitud solicitud = procesarSolicitud();
+        printf("[Manejador] Procesando solicitud del dispositivo '%s': %s\n",
+               solicitud.dispositivo, solicitud.operacion);
+        sleep(1); 
+    }
+    return NULL;
+}
+
+void* dispositivoDiscoDuro(void* arg) {
+    Solicitud solicitud = {"Disco Duro", "Leer datos del sector 5"};
+    agregarSolicitud(solicitud);
+    sleep(2);
+    solicitud = (Solicitud){"Disco Duro", "Escribir datos en el sector 10"};
+    agregarSolicitud(solicitud);
+    return NULL;
+}
+
+void* dispositivoImpresora(void* arg) {
+    Solicitud solicitud = {"Impresora", "Imprimir documento 'reporte.pdf'"};
+    agregarSolicitud(solicitud);
+    sleep(3);
+    solicitud = (Solicitud){"Impresora", "Imprimir documento 'factura.txt'"};
+    agregarSolicitud(solicitud);
+    return NULL;
+}
+
+void* dispositivoTeclado(void* arg) {
+    Solicitud solicitud = {"Teclado", "Capturar texto del usuario"};
+    agregarSolicitud(solicitud);
+    sleep(1);
+    solicitud = (Solicitud){"Teclado", "Detección de pulsación de tecla"};
+    agregarSolicitud(solicitud);
+    return NULL;
+}
+
+int main() {
+    pthread_t hiloManejador, hiloDiscoDuro, hiloImpresora, hiloTeclado;
+
+    pthread_create(&hiloManejador, NULL, manejadorCentral, NULL);
+
+    pthread_create(&hiloDiscoDuro, NULL, dispositivoDiscoDuro, NULL);
+    pthread_create(&hiloImpresora, NULL, dispositivoImpresora, NULL);
+    pthread_create(&hiloTeclado, NULL, dispositivoTeclado, NULL);
+
+    pthread_join(hiloDiscoDuro, NULL);
+    pthread_join(hiloImpresora, NULL);
+    pthread_join(hiloTeclado, NULL);
+
+    pthread_cancel(hiloManejador);
+    pthread_mutex_destroy(&mutexCola);
+    pthread_cond_destroy(&condColaLlena);
+    pthread_cond_destroy(&condColaVacia);
+
+    printf("Simulación finalizada.\n");
+    return 0;
+}
+```
+
+-----
+
+# Avanzados.
+
+##  Explica cómo los sistemas operativos modernos optimizan las operaciones de entrada/salida con el uso de memoria caché.
+
+Los sistemas operativos modernos optimizan las operaciones de entrada/salida (E/S) mediante el uso de memoria caché, un mecanismo esencial para reducir la brecha de rendimiento entre la CPU y los dispositivos de almacenamiento.
+La memoria caché es una pequeña cantidad de almacenamiento rápido que se sitúa entre el procesador y los dispositivos más lentos, como los discos duros. Su objetivo principal es mantener los datos más utilizados o aquellos que probablemente se requerirán en el futuro, evitando accesos innecesarios a dispositivos lentos.
+Cuando una aplicación solicita datos, el sistema operativo primero verifica si esos datos están en la caché. Si están disponibles, el sistema los entrega directamente, acelerando el proceso. En caso contrario, se produce un fallo en caché, lo que obliga al sistema a leer los datos del dispositivo de almacenamiento, cargarlos en la caché y luego proporcionarlos a la aplicación. Para mejorar la eficiencia de estas operaciones, los sistemas operativos emplean una técnica conocida como prefetching o lectura anticipada. Por ejemplo, si se detecta que un archivo está siendo leído de manera secuencial, se cargan bloques adicionales en la caché con la expectativa de que serán necesarios.
+En cuanto a las escrituras, los datos generados por las aplicaciones pueden ser almacenados temporalmente en la caché antes de ser escritos en el dispositivo de almacenamiento. Este método, conocido como escritura diferida o write-back, permite agrupar múltiples operaciones de escritura en una sola transacción, reduciendo el número de accesos al dispositivo. Por otro lado, existe la técnica de escritura directa o write-through, que consiste en escribir los datos simultáneamente en la caché y en el almacenamiento físico para garantizar la consistencia de los datos, aunque a expensas de un menor rendimiento. Periódicamente, el sistema sincroniza los datos almacenados en la caché con el dispositivo subyacente mediante una operación conocida como flush, minimizando así la posible pérdida de información en caso de fallos.
+Para administrar eficientemente la memoria caché, los sistemas operativos implementan algoritmos de reemplazo que determinan qué datos mantener y cuáles descartar cuando la caché está llena. Algoritmos como LRU (Least Recently Used), LFU (Least Frequently Used) y Clock son populares por su capacidad de seleccionar inteligentemente los datos menos necesarios para liberar espacio. Además, los sistemas operativos modernos utilizan técnicas como la caché de búfer, que almacena bloques de datos del disco, y la caché de páginas, que administra los datos de archivos y permite tratar las operaciones de E/S como operaciones de memoria, incrementando la eficiencia. Algunos sistemas unifican estas cachés para evitar duplicaciones y maximizar el uso de la memoria disponible. Además de los datos, se almacenan metadatos, como información sobre los archivos y directorios, para acelerar tareas como listar directorios o abrir archivos.
+El uso de memoria caché ofrece múltiples ventajas. Reduce significativamente el tiempo de acceso a los datos, disminuye la carga en los dispositivos de almacenamiento, agrupa operaciones pequeñas en grandes transacciones y permite un mejor aprovechamiento de los recursos del sistema. Sin embargo, presenta desafíos como mantener la consistencia de los datos en caso de fallos, decidir qué datos conservar en la caché y manejar adecuadamente la memoria asignada para ella. Además, el tamaño de los archivos puede limitar los beneficios, especialmente en casos de archivos muy grandes que exceden la capacidad de la caché.
+Por ejemplo, al guardar un documento en un procesador de texto, los cambios se escriben primero en la caché del disco y posteriormente se sincronizan con el almacenamiento físico. Si el usuario necesita volver a acceder al archivo, los datos pueden recuperarse directamente desde la caché, acelerando el proceso.
+----------
